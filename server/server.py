@@ -18,6 +18,7 @@ import FPV
 import psutil
 import switch
 import LED
+import ultrasonic
 
 step_set = 1
 speed_set = 100
@@ -77,13 +78,26 @@ def get_swap_info():
     swap_cent = psutil.swap_memory()[3]
     return str(swap_cent)
 
+def get_ult_dist():
+    """ Return distance in meters usage using ultdist """
+    #dist = 'test'
+    try:
+        dist = round(ultrasonic.ultdist(), 2)
+    except Exception as e:
+        dist = e.__class__
+
+    if dist is not None:
+        return str(dist)
+    else:
+        return 'none'
 
 def info_get():
-    global cpu_t,cpu_u,gpu_t,ram_info
+    global cpu_t,cpu_u,gpu_t,ram_info,ult_dist
     while 1:
         cpu_t = get_cpu_tempfunc()
         cpu_u = get_cpu_use()
         ram_info = get_ram_info()
+        ult_dist = get_ult_dist()
         time.sleep(3)
 
 
@@ -160,7 +174,7 @@ def info_send_client():
     print(SERVER_ADDR)
     while 1:
         try:
-            Info_Socket.send((get_cpu_tempfunc()+' '+get_cpu_use()+' '+get_ram_info()).encode())
+            Info_Socket.send((get_cpu_tempfunc()+' '+get_cpu_use()+' '+get_ram_info()+' '+get_ult_dist()).encode())
             time.sleep(1)
         except:
             pass
