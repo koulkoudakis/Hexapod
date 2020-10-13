@@ -12,7 +12,7 @@ Tr = 11 # GPIO 11
 Ec = 8  # GPIO 08
 
 def ultdist():                # Reading distance using ultrasonic sensor
-    GPIO.setwarnings(False)
+#GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(Tr, GPIO.OUT,initial=GPIO.LOW)
     GPIO.setup(Ec, GPIO.IN)
@@ -24,14 +24,19 @@ def ultdist():                # Reading distance using ultrasonic sensor
 
     while not GPIO.input(Ec):
         pass
+	#print('not yet')
+
 
     t1 = time.time()
     print("Receive started")
 
     while GPIO.input(Ec):
+	#print('echo')
         pass
 
+
     t2 = time.time()
+
 
     return (t2-t1)*34300.0/2       # 1/2 distance travelled(cm) = speed of sound(343 m/s) * change in time (t2-t1) / 2
 
