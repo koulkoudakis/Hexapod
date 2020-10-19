@@ -287,16 +287,18 @@ if __name__ == '__main__':
 	sc = ServoCtrl()
 	sc.start()
 	while 1:
+		'''
 		sc.moveAngle(0,(random.random()*100-50))
 		time.sleep(1)
 		sc.moveAngle(1,(random.random()*100-50))
 		time.sleep(1)
 		'''
-		sc.singleServo(0, 1, 5)
-		time.sleep(6)
-		sc.singleServo(0, -1, 30)
+	
+		sc.singleServo(1, 1, 5)
 		time.sleep(1)
-		'''
+		sc.singleServo(1, -1, 30)
+		time.sleep(1)
+		
 		'''
 		delaytime = 5
 		sc.certSpeed([0,7], [60,0], [40,60])

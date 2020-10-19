@@ -11,14 +11,15 @@ import time
 Tr = 11 # GPIO 11
 Ec = 8  # GPIO 08
 
-def ultdist():                # Reading distance using ultrasonic sensor
-#GPIO.setwarnings(False)
+def setup():        # Sets up GPIO pins
+    GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
-    GPIO.setup(Tr, GPIO.OUT,initial=GPIO.LOW)
-    GPIO.setup(Ec, GPIO.IN)
+    GPIO.setup(Tr, GPIO.OUT,initial=GPIO.LOW)   # Triggers ultrasonic buzzer
+    GPIO.setup(Ec, GPIO.IN)                     # Waits for echo
 
+def ultdist():      # Reading distance using ultrasonic sensor
     GPIO.output(Tr, GPIO.HIGH)
-    print('trigger')
+    #print('trigger')
     time.sleep(0.00001)
     GPIO.output(Tr, GPIO.LOW)
 
@@ -28,12 +29,11 @@ def ultdist():                # Reading distance using ultrasonic sensor
 
 
     t1 = time.time()
-    print("Receive started")
+    #print("Receive started")
 
     while GPIO.input(Ec):
 	#print('echo')
         pass
-
 
     t2 = time.time()
 

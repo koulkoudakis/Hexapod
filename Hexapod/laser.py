@@ -18,11 +18,11 @@ def laser(state):                # Activate laser
   
     if state == 0:
         GPIO.output(La, GPIO.LOW)
-        print('laser off')
+        #print('laser off')
     
     else:
         GPIO.output(La, GPIO.HIGH)
-        print('laser on')
+        #print('laser on')
         
 def blink(OnTime, OffTime):      # Laser blinks at custom interval
     while True:
