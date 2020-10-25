@@ -17,7 +17,8 @@ import time
 from rpi_ws281x import *
 
 import robotLight
-import move
+#import move
+import body
 
 import laser
 import ultrasonic
@@ -31,7 +32,7 @@ smooth = 0 	# Smooth body servo mode
 checkMove = 0	# Check movement cycle
 moveCycles = 0	# Complete movement cycles
 
-cascPath = '/home/pi/adeept_raspclaws/server/haarcascade_frontalface_default.xml'
+cascPath = 'haarcascade_frontalface_default.xml'
 faceCascade = cv2.CascadeClassifier(cascPath)
 
 font = cv2.FONT_HERSHEY_SIMPLEX
@@ -61,7 +62,7 @@ neigbors = 5
 # Shape Classification function
 minShapeArea = 500
 
-RL=robotLight.RobotLight()						# Set up LEDs
+RL = robotLight.RobotLight()						# Set up LEDs
 RL.start()
 RL.breath(127,127,255)
 
@@ -97,18 +98,18 @@ def facetrack(frame):
 		cv2.putText(frame, 'Face Detected', (40, 60), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 		laser.laser(0)  # turn laser off
 		print(targetX, targetY)
-		print(f' Head position: up/down: {move.Up_Down_input} left/right {move.Left_Right_input}')
+		print(f' Head position: up/down: {body.Hexapod.Up_Down_input} left/right {body.Hexapod.Left_Right_input}')
 
 		# Center face along horizontal bisector
 		if targetY < ((resH // 2) - tor):
 			error = ((resH // 2) - targetY) / 15
 			outv = error
-			move.look_up(outv)
+			body.Hexapod.look_up(outv)
 			Y_lock = 0
 		elif targetY > ((resH // 2) + tor):
 			error = (targetY - (resH // 2)) / 15
 			outv = error
-			move.look_down(outv)
+			body.Hexapod.look_down(outv)
 			Y_lock = 0
 		else:
 			Y_lock = 1
@@ -117,12 +118,12 @@ def facetrack(frame):
 		if targetX < ((resW // 2) - tor):
 			error_X = ((resW // 2) - targetX) / 15
 			outv_X = error_X
-			move.look_left(outv_X)
+			body.Hexapod.look_left(outv_X)
 			X_lock = 0
 		elif targetX > ((resW // 2) + tor):
 			error_X = (targetX - (resW // 2)) / 15
 			outv_X = error_X
-			move.look_right(outv_X)
+			body.Hexapod.look_right(outv_X)
 			X_lock = 0
 		else:
 			X_lock = 1
@@ -204,15 +205,15 @@ while True:
 		loop()
 		
 	frameCounter +=1
-	#print(move.step_set)
+	#print(body.Hexapod.step_set)
 	
 	# Check movement cycle
 	
-	if move.step_set !=1:
+	if body.Hexapod.step_set !=1:
 		checkMove = 1
 			
 	if checkMove:
-		if move.step_set == 1:
+		if body.Hexapod.step_set == 1:
 			checkMove = 0
 			moveCycles += 1
 			print(f'Movement cycles: {moveCycles}, Distance covered: {moveCycles * 4} cm')		
@@ -260,60 +261,60 @@ while True:
 		# Manual head movement
 				
 		elif keyPressed == 82:
-				move.look_up(headMoveSensitivity)
+				body.Hexapod.look_up(headMoveSensitivity)
 				print('Head Up')		
 				
 		elif keyPressed == 84:
-				move.look_down(headMoveSensitivity)
+				body.Hexapod.look_down(headMoveSensitivity)
 				print('Head Down')		
 				
 		elif keyPressed == 81:
-				move.look_left(headMoveSensitivity)
+				body.Hexapod.look_left(headMoveSensitivity)
 				print('Head Left')		
 				
 		elif keyPressed == 83:
-				move.look_right(headMoveSensitivity)
+				body.Hexapod.look_right(headMoveSensitivity)
 				print('Head Right')									
 		
 		# Manual body movement
 		
 		elif keyPressed == ord('i'):
-				move.commandInput('forward')
+				body.commandInput('forward',body.Hexapod)
 				print('Moving Forward')
 		
 		elif keyPressed == ord('k'):
-				move.commandInput('backward')
+				body.commandInput('backward',body.Hexapod)
 				print('Moving Backward')
 				
 		elif keyPressed == ord('j'):
-				move.commandInput('left')
+				body.commandInput('left',body.Hexapod)
 				print('Moving Left')
 				
 		elif keyPressed == ord('l'):
-				move.commandInput('right')
+				body.commandInput('right',body.Hexapod)
 				print('Moving Right')
 				
 		elif keyPressed == ord('o'):
 				if smooth:
-					move.commandInput('automaticOff')
+					body.commandInput('automaticOff',body.Hexapod)
 					smooth = 0
 					print('Smooth Mode off')
 				else:
 					smooth = 1
-					move.commandInput('automatic')
+					body.commandInput('automatic',body.Hexapod)
 					print('Smooth Mode on')
 				
 		elif keyPressed == ord('p'):
-				move.commandInput('stand')
+				body.commandInput('stand',body.Hexapod)
 				moveCycles = 0
 				print('Stopped Movement')
 		
 		# Quit
 		
 		elif keyPressed == ord('q'):
-				move.commandInput('stand')
+				body.commandInput('stand',body.Hexapod)
 				time.sleep(0.1)
-				move.init_all()
+				body.Hexapod.init_all()
 				RL.pause()
 				laser.destroy()			
 				break
