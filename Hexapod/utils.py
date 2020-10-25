@@ -47,12 +47,6 @@ pixelToCm = {   "9":  65.00,
                 "50": 7.87,
                 "51": 7.42
             
-            
-            
-
-
-
-
 }
 
 # Returns closed contours with a specified number of corners and a minimum area
@@ -152,21 +146,58 @@ def obs_width(frame, bounds, dist, draw = False, cm = False):
             if len(xMinCoord) == 2 and len(xMinCoord) == 2:
                 cv2.line(frame, xMinCoord, xMaxCoord, (255,0,255), 3)
                 if cm:
-                    if dist >=10 and dist <=50:
-                        distance = dist        # Distance to object
-                        pixelRatio = pixelToCm.get(str(distance))
-                        cmWidth = round(width * 1/pixelRatio, 1)
+                        if dist >=10 and dist <=50:
+                                distance = dist        # Distance to object
+                                pixelRatio = pixelToCm.get(str(distance))
+                                cmWidth = round(width * 1/pixelRatio, 1)
                         
-                        cv2.putText(frame, 'width(cm): ' + str(cmWidth), (bounds[0], bounds[1] - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+                                cv2.putText(frame, 'width(cm): ' + str(cmWidth), (bounds[0], bounds[1] - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+                        
+                        else:
+                                cv2.putText(frame, 'Target out of range', (bounds[0], bounds[1] - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
                 else:
-                    cv2.putText(frame, 'Target out of range', (bounds[0], bounds[1] - 5),
+                        cv2.putText(frame, 'width(p): ' + str(width), (bounds[0], bounds[1] - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
-            else:
-                cv2.putText(frame, 'width(p): ' + str(width), (bounds[0], bounds[1] - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
         
         return frame, width, coords
         
     else:
         return frame
+        
+def shapeclassify(frame, minShapeArea = 2500, showEdge = False):
+        gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray,(7,7),1)
+        canny = cv2.Canny(blur,50,50)
+        if showEdge: cv2.imshow('Shape Edge Detection', canny)
+        
+        contours,hierarchy = cv2.findContours(canny,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)[-2:]
+
+        for cnt in contours:
+                area = cv2.contourArea(cnt)
+                print(f'Area of shape:{area}')
+                if area > minShapeArea:
+                        cv2.drawContours(frame, cnt, -1, (255, 0, 0), 2)
+                        peri = cv2.arcLength(cnt,True)
+				
+                        approx = cv2.approxPolyDP(cnt,0.02*peri,True)
+                        #print(len(approx))
+                        objCor = len(approx)
+                        x, y, w, h = cv2.boundingRect(approx)
+
+                        if objCor ==3: objectType ="Triangle"
+                        
+                        elif objCor == 4:
+                                aspRatio = w/float(h)
+                                if aspRatio > 0.95 and aspRatio < 1.05: objectType= "Square"
+                                else: objectType = "Rectangle"
+                        
+                        elif objCor == 5: objectType = "Pentagon"
+                        elif objCor == 6: objectType = "Hexagon"
+                        elif objCor == 7: objectType = "Heptagon"
+                        elif objCor == 8: objectType = "Octagon"
+                        else:objectType = "Ellipse"
+                        
+                        cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,0),1)
+                        cv2.putText(frame,objectType, (x+(w//2)-10,y+(h//2)-10),cv2.FONT_HERSHEY_COMPLEX,0.5,(255,0,255),1, cv2.LINE_AA)

@@ -27,6 +27,10 @@ import utils
 headMode = 'Default'
 headMoveSensitivity = 5
 
+smooth = 0 	# Smooth body servo mode
+checkMove = 0	# Check movement cycle
+moveCycles = 0	# Complete movement cycles
+
 cascPath = '/home/pi/adeept_raspclaws/server/haarcascade_frontalface_default.xml'
 faceCascade = cv2.CascadeClassifier(cascPath)
 
@@ -127,40 +131,6 @@ def facetrack(frame):
 		cv2.putText(frame, 'Searching for Face...', (40, 60), font, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
 		laser.laser(1)  # turn laser on
 
-def shapeclassify(frame):
-		gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-		blur = cv2.GaussianBlur(gray,(7,7),1)
-		canny = cv2.Canny(blur,50,50)
-		
-		contours,hierarchy = cv2.findContours(canny,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)[-2:]
-    
-		for cnt in contours:
-			area = cv2.contourArea(cnt)
-			print(f'Area of shape:{area}')
-			if area > minShapeArea:
-				cv2.drawContours(frame, cnt, -1, (255, 0, 0), 2)
-				peri = cv2.arcLength(cnt,True)
-				
-				approx = cv2.approxPolyDP(cnt,0.02*peri,True)
-				#print(len(approx))
-				objCor = len(approx)
-				x, y, w, h = cv2.boundingRect(approx)
- 
-				if objCor ==3: objectType ="Triangle"
-				
-				elif objCor == 4:
-					aspRatio = w/float(h)
-					if aspRatio > 0.95 and aspRatio < 1.05: objectType= "Square"
-					else: objectType = "Rectangle"
-				
-				elif objCor == 5: objectType = "Pentagon"
-				elif objCor == 6: objectType = "Hexagon"
-				elif objCor == 7: objectType = "Heptagon"
-				elif objCor == 8: objectType = "Octagon"
-				else:objectType = "Ellipse"
-				
-				cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,0),1)
-				cv2.putText(frame,objectType, (x+(w//2)-10,y+(h//2)-10),cv2.FONT_HERSHEY_COMPLEX,0.5,(255,0,255),1, cv2.LINE_AA)
 					
 def loop():
 		# Capture frame for each loop
@@ -168,7 +138,7 @@ def loop():
 		if headMode == 'Face Tracking':
 			facetrack(frame)
 		elif headMode == 'Shape Classifying':
-			shapeclassify(frame)
+			utils.shapeclassify(frame, showEdge = True)
 		elif headMode == 'Edge Detection':
 			frame, contours = utils.get_contours(frame, showEdge = True, minArea = 2500,
 																				filter = 4, draw = False)
@@ -176,7 +146,7 @@ def loop():
 			
 			if len(contours) > 0:
 				utils.obs_width(frame, contours[0][3], distance, draw = True)
-				print(contours[0][3])
+				#print(contours[0][3])
 		
 		elif headMode == 'Measuring Obstacle':
 			frame, contours = utils.get_contours(frame, showEdge = True, minArea = 2500,
@@ -185,7 +155,7 @@ def loop():
 			
 			if len(contours) > 0:
 				utils.obs_width(frame, contours[0][3], int(float((distance))), draw = True, cm = True)
-				print(contours[0][3])
+				#print(contours[0][3])
 
 		# Display distance from ultrasonic sensor
 		frameDist = 'distance: ' + distance + 'cm'
@@ -221,7 +191,8 @@ while True:
 		frameZeroTime = frameThirtyTime		
 		
 		# print current mode
-		print(headMode)				
+		#print(headMode)
+						
 
 		if dist < 150.0:								# Ignore distances over 1.5m
 			distance = str(round(dist,2))	# This is the value passed to the frame loop
@@ -233,6 +204,20 @@ while True:
 		loop()
 		
 	frameCounter +=1
+	#print(move.step_set)
+	
+	# Check movement cycle
+	
+	if move.step_set !=1:
+		checkMove = 1
+			
+	if checkMove:
+		if move.step_set == 1:
+			checkMove = 0
+			moveCycles += 1
+			print(f'Movement cycles: {moveCycles}, Distance covered: {moveCycles * 4} cm')		
+	
+	
 	
 	# Keyboard input
 	keyPressed = cv2.waitKey(1) & 0xFF
@@ -308,8 +293,19 @@ while True:
 				move.commandInput('right')
 				print('Moving Right')
 				
+		elif keyPressed == ord('o'):
+				if smooth:
+					move.commandInput('automaticOff')
+					smooth = 0
+					print('Smooth Mode off')
+				else:
+					smooth = 1
+					move.commandInput('automatic')
+					print('Smooth Mode on')
+				
 		elif keyPressed == ord('p'):
 				move.commandInput('stand')
+				moveCycles = 0
 				print('Stopped Movement')
 		
 		# Quit
@@ -326,5 +322,3 @@ while True:
 # Release capture
 video_cap.release()
 cv2.destroyAllWindows()
-
-	
