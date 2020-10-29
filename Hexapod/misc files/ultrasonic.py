@@ -8,8 +8,7 @@
 import RPi.GPIO as GPIO
 import time
 
-Tr = 11 # GPIO 11
-Ec = 8  # GPIO 08
+
 
 def setup():        # Sets up GPIO pins
     GPIO.setwarnings(False)

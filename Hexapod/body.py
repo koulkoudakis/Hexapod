@@ -7,8 +7,6 @@ Description: Governs servo movement, locomotion
 import time
 import Adafruit_PCA9685
 from mpu6050 import mpu6050
-# import Kalman_filter
-# import PID
 import threading
 import RPIservo
 
@@ -79,11 +77,13 @@ class Body:
             exec('self.pwm%d=RPIservo.init_pwm%d' % (i, i))
 
         # Accelerometer/Gyroscope
+        '''
         try:
             self.sensor = mpu6050(0x68)
             self.mpu6050_connection = 1
         except:
             self.mpu6050_connection = 0
+        '''
 
     '''
     Initialize all servos
