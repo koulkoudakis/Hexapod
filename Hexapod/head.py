@@ -9,19 +9,24 @@ from rpi_ws281x import *
 
 import robotLight		# LED control
 
-import body					# Servo control, locomotion
+import body			# Servo control, locomotion
 
 import peripherals	# Inertial measurement units, ultrasonic distance
-										# sensor, laser emitter, etc.
+			# sensor, laser emitter, etc.
 										
-import utils				# functions for computer vision, logic
+import utils		# functions for computer vision, logic
 
 
 headMode = 'Default'
-headMoveSensitivity = 5
+headMoveSensitivity = 5	# Manual head movement
 
+# Movement variables
+global direction, angle, destination
+global smooth
 smooth = 0 	# Smooth body servo mode
+global checkMove
 checkMove = 0	# Check movement cycle
+global moveCycles
 moveCycles = 0	# Complete movement cycles
 
 # Face classifier cascade file
@@ -30,7 +35,7 @@ faceCascade = cv2.CascadeClassifier(cascPath)
 
 font = cv2.FONT_HERSHEY_SIMPLEX
 
-resW = 480					# Resolution width and
+resW = 480		# Resolution width and
 resH = (resW//4)*3	# Height	(aspect ratio must be 4:3)
 
 frameCounter = 1
@@ -70,7 +75,7 @@ imuData = str('X=%f,Y=%f,Z=%f' % (imu.accel['x'], imu.accel['y'],
                                   
 # External inertial measurement unit object
 compass = peripherals.exIMU('Compass', 1)
-heading = str(compass.heading) # 0-360 degrees                             
+heading = str(compass.heading) # 0-360 degrees
 
 # Laser emitter object
 laser = peripherals.Laser('Laser Emitter', 1)	
@@ -79,97 +84,185 @@ laser = peripherals.Laser('Laser Emitter', 1)
 ultra = peripherals.Ultrasonic('Ultrasonic Sensor', 1)
 distance = str(round(ultra.ultdist(),2))	# Reads initial distance
 
-# Face tracking using head servos
-def facetrack(frame):
+# Minimap object
+minimap = utils.Map(400,400,initHeading=compass.heading)
+minimap.draw_map()
 
-	# Convert to grayscale
-	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+def check_move():
+	global checkMove
+	global moveCycles
+	
+	if body.Hexapod.step_set !=1:
+		checkMove = 1
+			
+	if checkMove:
+		if body.Hexapod.step_set == 1:
+			checkMove = 0
+			moveCycles += 1
 
-	# Apply HAAR cascade for face detection
-	faces = faceCascade.detectMultiScale(
-		gray,
-		scaleFactor=1.1,
-		minNeighbors=neigbors,
-		minSize=minFaceSize,
-		flags=cv2.CASCADE_SCALE_IMAGE
-	)
+'''
+Hexapod rotates at 15 degrees per move cycle
+'''
+def rotate(direction, angle, rest=1):
+	global moveCycles
+	moveCycles = 0
+	global smooth
+	smooth = 1
+	
+	angle = abs(angle)
+	lowerAngle = (angle//15)*15
+	upperAngle = ((angle//15)*15) + 15
+	rotateCycles = (angle//15)
+	
+	body.commandInput('automatic',body.Hexapod)
+	
+	time.sleep(0.01)
+	if direction:	# Rotate right
+		print(f'Rotating right...{rotateCycles} cycles')
+		print(f'lower: {lowerAngle} upper: {upperAngle}')
+		
+		if angle >= lowerAngle and angle < upperAngle:
+			body.commandInput('right',body.Hexapod)
+			while moveCycles != rotateCycles:
+				check_move()
+				time.sleep(0.01)
+			print(f'Rotation: {moveCycles*15} degrees right')
+			body.commandInput('stand',body.Hexapod)
+			moveCycles = 0
+			
+	else:	# Rotate left
+		print(f'Rotating left...{rotateCycles} cycles')
+		
+		if angle >= lowerAngle and angle < upperAngle:
+			body.commandInput('left',body.Hexapod)
+			while moveCycles != rotateCycles:
+				check_move()
+				time.sleep(0.01)
+			print(f'Rotation: {moveCycles*15} degrees left')
+			body.commandInput('stand',body.Hexapod)
+			moveCycles = 0
+			
+	time.sleep(rest)
 
-	# Draw rectangle around face
-	for (x, y, w, h) in faces:
-		cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-		targetX = x + (w // 2)
-		targetY = y + (h // 2)
-		print(len(faces))
 
-	# Track face if any is detected
-	if len(faces) > 0:
-		cv2.putText(frame, 'Face Detected', (40, 60), font, 0.5,
-		 (255, 255, 255), 1, cv2.LINE_AA)
-		laser.laser(0)  # turn laser off
-		print(targetX, targetY)
-		print(f' Head position: up/down: {body.Hexapod.Up_Down_input} left/right {body.Hexapod.Left_Right_input}')
-
-		# Center face along horizontal bisector
-		if targetY < ((resH // 2) - tor):
-			error = ((resH // 2) - targetY) / 15
-			outv = error
-			body.Hexapod.look_up(outv)
-			Y_lock = 0
-		elif targetY > ((resH // 2) + tor):
-			error = (targetY - (resH // 2)) / 15
-			outv = error
-			body.Hexapod.look_down(outv)
-			Y_lock = 0
-		else:
-			Y_lock = 1
-
-		# Center face along vertical bisector
-		if targetX < ((resW // 2) - tor):
-			error_X = ((resW // 2) - targetX) / 15
-			outv_X = error_X
-			body.Hexapod.look_left(outv_X)
-			X_lock = 0
-		elif targetX > ((resW // 2) + tor):
-			error_X = (targetX - (resW // 2)) / 15
-			outv_X = error_X
-			body.Hexapod.look_right(outv_X)
-			X_lock = 0
-		else:
-			X_lock = 1
-
+'''
+Hexapod moves forward at 4 cm per move cycle
+'''	
+def move_distance(direction, destination, rest=1):
+	global moveCycles
+	moveCycles = 0
+	smooth = 1
+	body.commandInput('automatic',body.Hexapod)
+	steps = destination // 4
+	time.sleep(0.01)
+	
+	if direction:
+		print(f'Moving forward...{steps} steps')
+		body.commandInput('forward',body.Hexapod)
+		while moveCycles < steps:
+			time.sleep(0.01)
+			check_move()
+		body.commandInput('stand',body.Hexapod)
+		print(f'Distance moved: {moveCycles*4} cm')
+		moveCycles = 0
+	
 	else:
-		cv2.putText(frame, 'Searching for Face...', (40, 60), font, 0.5,
-		 (0, 0, 255), 1, cv2.LINE_AA)
-		laser.laser(1)  # turn laser on
-
-					
+		print(f'Moving backward...{steps} steps')
+		body.commandInput('backward',body.Hexapod)	
+		while moveCycles < steps:
+			time.sleep(0.01)
+			check_move()
+		body.commandInput('stand',body.Hexapod)
+		distMoved = moveCycles*4
+		print(f'Distance moved: {distMoved} cm')
+		moveCycles = 0
+	time.sleep(rest)
+	
 def loop():
-		# Capture frame for each loop
+		global direction, angle, destination
+		# Capture frame for each loop, raw frame can be used outside
 		ret, frame = video_cap.read()
 		
 		# Check current mode of first-person-view
 		if headMode == 'Face Tracking':
-			facetrack(frame)
+			utils.face_track(frame,body.Hexapod,laser,resW,resH)
+			
 		elif headMode == 'Shape Classifying':
 			utils.shapeclassify(frame, showEdge = True)
+			
 		elif headMode == 'Edge Detection':
-			frame, contours = utils.get_contours(frame, showEdge = True, minArea = 2500,
-																				filter = 4, draw = False)
+			frame, contours = utils.get_contours(
+				frame,
+				showEdge = True,
+				minArea = 2500,
+				filter = 4,
+				draw = False
+				)
 			print(f'Objects detected: {len(contours)}')
 			
 			if len(contours) > 0:
-				utils.obs_width(frame, contours[0][3], distance, draw = True)
+				utils.obs_width(frame,
+				contours[0][3],
+				int(float((distance))),
+				widthScale,
+				draw = True
+				)
 				#print(contours[0][3])
 		
 		elif headMode == 'Measuring Obstacle':
-			frame, contours = utils.get_contours(frame, showEdge = True, minArea = 2500,
-																				filter = 0, draw = True)
+			frame, contours = utils.get_contours(
+				frame,
+				showEdge = True,
+				minArea = 2500,
+				filter = 0,
+				draw = True
+				)
 			print(f'Objects detected: {len(contours)}')
 			
 			if len(contours) > 0:
-				utils.obs_width(frame, contours[0][3], int(float((distance))), widthScale,
-												draw = True, cm = True)
+				utils.obs_width(
+					frame,
+					contours[0][3],
+					int(float((distance))),
+					widthScale,
+					draw = True,
+					cm = True
+					)
 				#print(contours[0][3])
+				
+		elif headMode == 'Navigating':
+			frame, contours = utils.get_contours(
+					frame,
+					showEdge = True,
+					minArea = 2500,
+					filter = 0,
+					draw = True
+					)
+			print(f'Objects detected: {len(contours)}')
+			
+			if len(contours) > 0:
+				cmWidth = utils.obs_width(
+					frame,
+					contours[0][3],
+					int(float((distance))),
+					widthScale,
+					draw = True, cm = True
+					)[1]
+				#print(contours[0][3])
+				direction, angle, destination = utils.find_way(
+					frame,
+					contours[0][-2],
+					int(float(distance)),
+					cmWidth,
+					resW//2,
+					resW,
+					resH,
+					show=True
+					)
+				if direction: dirLR = 'right'
+				else: dirLR = 'left'
+				
+				#print(f'Rotate {angle} degrees {dirLR} then move {destination} cm forward')
 
 		# Display distance from ultrasonic sensor
 		frameDist = 'distance: ' + distance + 'cm'
@@ -185,11 +278,20 @@ def loop():
 		 font, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
 		
 		# Draw crosshair
-		cv2.line(frame, (resW//2 - 10, resH//2), (resW//2 + 10, resH//2),
-										(0,255,0), 1)
-		cv2.line(frame, (resW//2, resH//2 - 10), (resW//2, resH//2 + 10),
-										(0,255,0), 1)
-		
+		cv2.line(
+			frame,
+			(resW//2 - 10, resH//2),
+			(resW//2 + 10, resH//2),
+			(0,255,0),
+			1
+			)
+		cv2.line(
+			frame,
+			(resW//2, resH//2 - 10),
+			(resW//2, resH//2 + 10),
+			(0,255,0),
+			1
+			)
 		
 		# Add blank area to FPV window
 		blank = np.zeros((resH//4,resW,3), dtype=np.uint8)
@@ -208,30 +310,32 @@ def loop():
 		cv2.imshow('Hexapod FPV - Sharome Burton', frame)
 		
 		
-			
 while True:
 	
 	if frameCounter % 30 == 0:
-		dist = ultra.ultdist()				# Estimate distance every 30th frame
-		frameCounter = 1							# Reset frame counter
+		dist = ultra.ultdist()	# Estimate distance every 30th frame
+		frameCounter = 1	# Reset frame counter
 		frameThirtyTime = time.time()	# Store time when 30th frame is processed
 		
 		# calculates frames/sec using time to process 30 frames
-		fps = round(30/(frameThirtyTime-frameZeroTime),2)	
-		print(f'FPS: {fps}')																				
-		frameZeroTime = frameThirtyTime		
+		fps = round(30/(frameThirtyTime-frameZeroTime),2)
+		print(f'FPS: {fps}')
+		frameZeroTime = frameThirtyTime
 		
-		imu.read()	
+		# Read IMU
+		imu.read()
 		imuData = str('X=%f,Y=%f,Z=%f' % (imu.accel['x'], imu.accel['y'],
                                   imu.accel['z']))
-		compass.read()
+		compass.read() # Read compass data
 		heading = str(compass.heading)
 				
+		#minimap.update_map([200,200])
+		#minimap.draw_map()
 		
-		if dist < 150.0:								# Ignore distances over 1.5m
+		if dist < 150.0: # Ignore distances over 1.5m
 			distance = str(round(dist,2))	# This is the value passed to the frame loop
 		else:
-			distance = '9999'				# This is passed when the distance is over 1.5m
+			distance = '9999'# This is passed when the distance is over 1.5m
 		loop()
 	
 	else:		
@@ -263,6 +367,13 @@ while True:
 				headMode = 'default'
 				RL.breath(127,127,255)
 				print(headMode)
+				
+		elif keyPressed == ord('b'):
+				headMode = 'default'
+				RL.pause()
+				RL.setColor(255,255,255)
+				RL.both_on()
+				print('default - breathing off')
 
 		elif keyPressed == ord('f'):
 				headMode = 'Face Tracking'
@@ -290,7 +401,89 @@ while True:
 				RL.pause()
 				RL.setColor(255,255,255)
 				RL.both_on()
-				print(headMode)	
+				print(headMode)
+				
+		elif keyPressed == ord('n'):
+				headMode = 'Navigating'
+				RL.pause()
+				RL.setColor(255,255,255)
+				RL.both_on()
+				print(headMode)
+				
+		elif keyPressed == ord('t'):
+				print('Looking for text...')
+				# Input high res photo for text recognition
+				img = utils.photo(
+					video_cap,
+					1920,1440,
+					resW,
+					resH,
+					show = False
+					)
+				text = utils.text_read(
+					img,
+					img.shape[1],
+					img.shape[0],
+					prep = 't'
+					)
+				if text != None:
+					print('Text shown above was read')
+					
+				else:
+					print('Text not detected')
+				
+		elif keyPressed == ord('u'):
+			if headMode == 'Navigating':
+				print('Testing movement')
+				print(f'Rotate {angle} degrees {direction} then move {destination} cm forward')
+				angle=((((angle-1)//15)+2)*15)  
+				rotate(direction,angle)
+				time.sleep(0.1)
+				move_distance(1,destination+8)
+				minimap.update_map(
+					minimap.find_delta(direction,angle,destination),
+					obj=True,
+					objDist=dist
+					)
+				minimap.draw_map()
+				
+				time.sleep(0.1)
+				rotate((direction-1)*-1,angle)
+				time.sleep(0.1)
+				move_distance(1,32)
+				minimap.update_map(
+					minimap.find_delta((direction-1)*-1,angle,32),
+					obj=False,
+					)
+				minimap.draw_map()
+				
+				time.sleep(0.1)
+				rotate((direction-1)*-1,90)
+				time.sleep(0.1)
+				move_distance(1,32)
+				minimap.update_map(
+					minimap.find_delta((direction-1)*-1,89,32),
+					obj=False,
+					)
+				minimap.draw_map()
+				
+				time.sleep(0.1)
+				rotate((direction-1)*-1,88)
+				time.sleep(0.1)
+				move_distance(1,32)
+				minimap.update_map(
+					minimap.find_delta((direction-1)*-1,88,32),
+					obj=False,
+					)
+				minimap.draw_map()
+				
+			else:
+				rotate(0,90)
+				time.sleep(0.1)
+				move_distance(1,8)
+				minimap.update_map(minimap.find_delta(0,88,8))
+				minimap.draw_map()
+				print('Testing movement')
 				
 		# Manual head movement
 				

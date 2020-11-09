@@ -52,6 +52,8 @@ class exIMU(Peripheral):
         
         if self.status:
             self.setup(1)
+            time.sleep(0.5)
+            self.read()
         else:
             self.setup(0)
             
@@ -72,23 +74,26 @@ class exIMU(Peripheral):
             
             
     def read(self):
-        if (self.sensor.in_waiting > 0): # Checks number of bytes in 
-                                         # input buffer
-                                         
-            self.data = str(self.sensor.readline(), "utf-8").split(',')
-            if len(self.data) == 16:
-                self.heading = float(self.data[-1]) # Compass heading
-                if self.heading < 0:                # convert negative angles
-                    self.heading += 360.0
+        if self.BNO055:
+            if (self.sensor.in_waiting > 0): # Checks number of bytes in 
+                                             # input buffer
+                                             
+                self.data = str(self.sensor.readline(), "utf-8").split(',')
+                if len(self.data) == 16:
+                    self.heading = float(self.data[-1]) # Compass heading
+                    if self.heading < 0:                # convert negative angles
+                        self.heading += 360.0
+                        
+                    self.accX = float(self.data[0]) # Acceleration in X,
+                    self.accY = float(self.data[1]) # Y,
+                    self.accZ = float(self.data[2]) # Z direction
                     
-                self.accX = float(self.data[0]) # Acceleration in X,
-                self.accY = float(self.data[1]) # Y,
-                self.accZ = float(self.data[2]) # Z direction
-                
-                #print(f'Heading:{self.heading}, X:{self.accX} Y:{self.accY} Z:{self.accZ}')
-                self.sensor.reset_input_buffer() 
-                return [self.heading, self.accX, self.accY, self.accZ]
-                       
+                    #print(f'Heading:{self.heading}, X:{self.accX} Y:{self.accY} Z:{self.accZ}')
+                    self.sensor.reset_input_buffer() 
+                    return [self.heading, self.accX, self.accY, self.accZ]
+        
+        else:
+            pass               
     
 
 '''
@@ -235,12 +240,12 @@ if __name__ == "__main__":
     compass = exIMU('Compass',1)
 
     while True:
-        '''
         
+        '''
         print(f"distance: {ultra.ultdist():.2f}cm")
         time.sleep(0.5)
-        
         '''
+        
 
         '''
         
