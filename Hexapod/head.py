@@ -29,22 +29,12 @@ checkMove = 0	# Check movement cycle
 global moveCycles
 moveCycles = 0	# Complete movement cycles
 
-# Face classifier cascade file
-cascPath = 'haarcascade_frontalface_default.xml'
-faceCascade = cv2.CascadeClassifier(cascPath)
-
-font = cv2.FONT_HERSHEY_SIMPLEX
-
 resW = 480		# Resolution width and
 resH = (resW//4)*3	# Height	(aspect ratio must be 4:3)
 
 frameCounter = 1
 frameZeroTime = time.time()
 fps = 0		# Initial frames/second feedback
-
-# Face Tracking function
-minFaceSize = (30,30)	
-neigbors = 5	# Minimum nearest neighbors for positive identification
 
 Y_lock = 0		# Target is centered in Y direction
 X_lock = 0		# Target is centered in X direction
@@ -439,7 +429,7 @@ while True:
 				angle=((((angle-1)//15)+2)*15)  
 				rotate(direction,angle)
 				time.sleep(0.1)
-				move_distance(1,destination+8)
+				move_distance(1,destination+16)
 				minimap.update_map(
 					minimap.find_delta(direction,angle,destination),
 					obj=True,
@@ -453,26 +443,6 @@ while True:
 				move_distance(1,32)
 				minimap.update_map(
 					minimap.find_delta((direction-1)*-1,angle,32),
-					obj=False,
-					)
-				minimap.draw_map()
-				
-				time.sleep(0.1)
-				rotate((direction-1)*-1,90)
-				time.sleep(0.1)
-				move_distance(1,32)
-				minimap.update_map(
-					minimap.find_delta((direction-1)*-1,89,32),
-					obj=False,
-					)
-				minimap.draw_map()
-				
-				time.sleep(0.1)
-				rotate((direction-1)*-1,88)
-				time.sleep(0.1)
-				move_distance(1,32)
-				minimap.update_map(
-					minimap.find_delta((direction-1)*-1,88,32),
 					obj=False,
 					)
 				minimap.draw_map()
