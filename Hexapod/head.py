@@ -4,6 +4,7 @@ import numpy as np
 import sys
 import os
 import time
+from random import *
 
 from rpi_ws281x import *
 
@@ -16,9 +17,10 @@ import peripherals	# Inertial measurement units, ultrasonic distance
 										
 import utils		# functions for computer vision, logic
 
+font = cv2.FONT_HERSHEY_COMPLEX
 
 headMode = 'Default'
-headMoveSensitivity = 5	# Manual head movement
+headMoveSensitivity = 10	# Manual head movement (0.5 deg/pwm)
 
 # Movement variables
 global direction, angle, destination
@@ -28,6 +30,11 @@ global checkMove
 checkMove = 0	# Check movement cycle
 global moveCycles
 moveCycles = 0	# Complete movement cycles
+
+global wayFollowing
+wayFollowing = 0 # Waypoint following
+global goalFollowing
+goalFollowing = 0 # Goal following
 
 resW = 480		# Resolution width and
 resH = (resW//4)*3	# Height	(aspect ratio must be 4:3)
@@ -78,9 +85,118 @@ distance = str(round(ultra.ultdist(),2))	# Reads initial distance
 minimap = utils.Map(400,400,initHeading=compass.heading)
 minimap.draw_map()
 
+def goal_nav(justRotate=False,scan=False):
+	goalDist = minimap.goalDist
+	
+	diffClockwise = minimap.goalHeading - minimap.heading
+	
+	if diffClockwise>180.0: 
+		diffClockwise -= 360.0
+		diffClockwise *= -1
+		direction = 1
+		
+	elif diffClockwise<=-180.0:
+		diffClockwise += 360.0
+		diffClockwise *= -1
+		direction = 0
+	
+	if diffClockwise<0: 
+		direction = 0 # turn right
+		cycles = (diffClockwise*-1)//15
+		rotate(direction,cycles*15)
+		if justRotate: return
+		if not scan:
+			move_distance(1,goalDist,scan=False)
+		else: move_distance(1,goalDist)
+		
+	else: 
+		direction = 1 # turn left
+		cycles = diffClockwise//15
+		rotate(direction,cycles*15)
+		if justRotate: return
+		if not scan:
+			move_distance(1,goalDist,scan=False)
+		else: move_distance(1,goalDist)
+
+def waypoint_nav(justRotate=False,scan=False):
+	
+	wayDist = minimap.wayDist
+	
+	diffClockwise = minimap.wayHeading - minimap.heading
+	
+	if diffClockwise>180.0: 
+		diffClockwise -= 360.0
+		diffClockwise *= -1
+		direction = 1
+		
+	elif diffClockwise<=-180.0:
+		diffClockwise += 360.0
+		diffClockwise *= -1
+		direction = 0
+	
+	if diffClockwise<0: 
+		direction = 0 # turn right
+		cycles = (diffClockwise*-1)//15
+		rotate(direction,cycles*15)
+		if justRotate: return
+		if not scan:
+			move_distance(1,wayDist,scan=False)
+		else: move_distance(1,wayDist)
+		
+	else: 
+		direction = 1 # turn left
+		cycles = diffClockwise//15
+		rotate(direction,cycles*15)
+		if justRotate: return
+		if not scan:
+			move_distance(1,wayDist,scan=False)
+		else: move_distance(1,wayDist)
+
+def check_map_input(rest=1):
+	global wayFollowing
+	global goalFollowing
+	
+	if wayFollowing:
+#		points=len(minimap.wayp)
+#		while len(minimap.wayp) == points:
+#			waypoint_nav()
+#			time.sleep(rest)
+#		print('Waypoint reached')
+		waypoint_nav()
+		wayFollowing=0
+		
+	if goalFollowing:
+		goal_nav(justRotate=True)
+		goalFollowing=0
+
+def mini_mouse_click(event, x, y, flags, param):
+	
+	# Check if left mouse button was clicked
+	if event == cv2.EVENT_LBUTTONDOWN:
+		
+		minimap.wayp.append([x,y])
+		
+		minimap.update_map(
+			minimap.find_delta(0,0,0),
+			)
+		minimap.draw_map()
+		
+	# Check if right mouse button was clicked
+	if event == cv2.EVENT_RBUTTONDOWN:
+		minimap.goal = [x,y]
+		
+		minimap.update_map(
+			minimap.find_delta(0,0,0),
+			)
+		minimap.draw_map()
+
+# Mouse Callback
+cv2.setMouseCallback('Minimap', mini_mouse_click)
+
 def check_move():
 	global checkMove
 	global moveCycles
+	completeStep = False
 	
 	if body.Hexapod.step_set !=1:
 		checkMove = 1
@@ -89,20 +205,23 @@ def check_move():
 		if body.Hexapod.step_set == 1:
 			checkMove = 0
 			moveCycles += 1
+			completeStep = True
+			
+	return completeStep
 
 '''
 Hexapod rotates at 15 degrees per move cycle
 '''
-def rotate(direction, angle, rest=1):
+def rotate(direction, angle, rest=1, mini=True):
 	global moveCycles
 	moveCycles = 0
 	global smooth
 	smooth = 1
 	
 	angle = abs(angle)
-	lowerAngle = (angle//15)*15
-	upperAngle = ((angle//15)*15) + 15
-	rotateCycles = (angle//15)
+	lowerAngle = ((((angle-1)//15)+1)*15)
+	upperAngle = ((((angle-1)//15)+1)*15) + 15
+	rotateCycles = ((angle-1)//15)+1
 	
 	body.commandInput('automatic',body.Hexapod)
 	
@@ -111,39 +230,47 @@ def rotate(direction, angle, rest=1):
 		print(f'Rotating right...{rotateCycles} cycles')
 		print(f'lower: {lowerAngle} upper: {upperAngle}')
 		
-		if angle >= lowerAngle and angle < upperAngle:
-			body.commandInput('right',body.Hexapod)
-			while moveCycles != rotateCycles:
-				check_move()
-				time.sleep(0.01)
-			print(f'Rotation: {moveCycles*15} degrees right')
-			body.commandInput('stand',body.Hexapod)
-			moveCycles = 0
+		#if angle >= lowerAngle and angle < upperAngle:
+		body.commandInput('right',body.Hexapod)
+		while moveCycles != rotateCycles:
+			check_move()
+			time.sleep(0.01)
+		print(f'Rotation: {moveCycles*15} degrees right')
+		body.commandInput('stand',body.Hexapod)
+		moveCycles = 0
 			
 	else:	# Rotate left
 		print(f'Rotating left...{rotateCycles} cycles')
+		print(f'lower: {lowerAngle} upper: {upperAngle}')
 		
-		if angle >= lowerAngle and angle < upperAngle:
-			body.commandInput('left',body.Hexapod)
-			while moveCycles != rotateCycles:
-				check_move()
-				time.sleep(0.01)
-			print(f'Rotation: {moveCycles*15} degrees left')
-			body.commandInput('stand',body.Hexapod)
-			moveCycles = 0
-			
+		#if angle >= lowerAngle and angle < upperAngle:
+		body.commandInput('left',body.Hexapod)
+		while moveCycles != rotateCycles:
+			check_move()
+			time.sleep(0.01)
+		print(f'Rotation: {moveCycles*15} degrees left')
+		body.commandInput('stand',body.Hexapod)
+		moveCycles = 0
+		
+	
+	minimap.update_map(
+		minimap.find_delta(direction, lowerAngle, 0)
+	)
+	minimap.draw_map()
+	
 	time.sleep(rest)
 
 
 '''
 Hexapod moves forward at 4 cm per move cycle
 '''	
-def move_distance(direction, destination, rest=1):
+def move_distance(direction, destination, rest=1, mini=True, scan=True):
 	global moveCycles
+	decision = 'continue'
 	moveCycles = 0
 	smooth = 1
 	body.commandInput('automatic',body.Hexapod)
-	steps = destination // 4
+	steps = ((destination-1) // 4) + 1
 	time.sleep(0.01)
 	
 	if direction:
@@ -151,10 +278,72 @@ def move_distance(direction, destination, rest=1):
 		body.commandInput('forward',body.Hexapod)
 		while moveCycles < steps:
 			time.sleep(0.01)
-			check_move()
+			fullStep = check_move()
+			if fullStep:
+				print(f'Step {moveCycles} of {steps}...')
+				if scan:
+					body.commandInput('stand',body.Hexapod)
+					time.sleep(1)
+					# Samples must be odd number >= 3
+					decision = scan_dist(samples=5) 
+					
+					if decision == 'continue':
+						body.commandInput('forward',body.Hexapod)
+					elif decision == 'stop':
+						print('Obstacle very close ahead... stopping')
+						break
+						
+					elif decision == 'right':
+						print('Obstacle close left... course-correcting...')
+						break
+					elif decision == 'left':
+						print('Obstacle close right... course-correcting...')
+						break
+					elif decision == 'reverse-turn':
+						print('Obstacle close ahead... reversing...')
+						break
+			
 		body.commandInput('stand',body.Hexapod)
 		print(f'Distance moved: {moveCycles*4} cm')
+
+		if mini:
+			minimap.update_map(
+				minimap.find_delta(direction, 0, moveCycles*4)
+			)
+			minimap.draw_map()
+
 		moveCycles = 0
+	
+		if decision == 'right':
+			rotate(1,89)
+			time.sleep(rest)
+			move_distance(1,32,scan=False)
+			time.sleep(rest)
+			rotate(0,89)
+			time.sleep(rest)
+			# Re-orient to main destination
+			move_distance(1,32)
+			
+		elif decision == 'left':
+			rotate(0,89)
+			time.sleep(rest)
+			move_distance(1,32,scan=False)
+			time.sleep(rest)
+			rotate(1,89)
+			time.sleep(rest)
+			# Re-orient to main destination
+			move_distance(1,32)
+			
+		elif decision == 'reverse-turn':
+			randDir = randint(0,1) # Random direction
+			move_distance(0,32,scan=False)
+			time.sleep(rest)
+			rotate(randDir,89)
+			time.sleep(rest)
+			move_distance(1,32,scan=False)
+			rotate((randDir-1)*-1,89)
+			# Re-orient to main destination
+			move_distance(1,32,scan=False)
 	
 	else:
 		print(f'Moving backward...{steps} steps')
@@ -165,8 +354,105 @@ def move_distance(direction, destination, rest=1):
 		body.commandInput('stand',body.Hexapod)
 		distMoved = moveCycles*4
 		print(f'Distance moved: {distMoved} cm')
+		
+		if mini:
+			minimap.update_map(
+				minimap.find_delta(direction, 0, moveCycles*-4)
+			)
+			minimap.draw_map()
+		
 		moveCycles = 0
+
 	time.sleep(rest)
+	
+def scan_dist(rest=0.5,samples=5,rng=120):
+	fov = []
+	dpi = (rng*2)//(samples-1)
+	i = 1
+	
+	body.Hexapod.look_left(rng) # Shift left (rng/2) deg
+	time.sleep(rest)
+	dist = ultra.ultdist()
+	
+	if dist < 150.0:
+		minimap.update_map(
+			minimap.find_delta(0,(rng//2),0),
+			obj=True,
+			objDist=dist
+			)
+		minimap.draw_map()
+		fov.append(dist)
+	else: 
+		minimap.update_map(
+				minimap.find_delta(0,(rng//2),0),
+				
+				)
+		minimap.draw_map()
+		fov.append(150.0)
+	
+	while i < samples:
+		
+		body.Hexapod.look_right(dpi)
+		time.sleep(rest)
+		
+		dist = ultra.ultdist()
+		
+		if dist < 150.0:
+			minimap.update_map(
+				minimap.find_delta(1,(dpi//2),0),
+				obj=True,
+				objDist=dist
+				)
+			minimap.draw_map()
+			
+			fov.append(dist)
+		else: 
+			minimap.update_map(
+				minimap.find_delta(1,(dpi//2),0),
+				
+				)
+			minimap.draw_map()
+			fov.append(150.0)
+		
+		i+=1
+	print(fov)
+	
+	body.Hexapod.look_home()
+	time.sleep(rest)
+	
+	dist = ultra.ultdist()
+	
+	
+	minimap.update_map(
+		minimap.find_delta(0,(rng//2),0),
+		obj=True,
+		objDist=dist
+		)
+	minimap.draw_map()
+	
+	# Decision-making
+	middle = (samples-1)//2
+	leftAvg = sum(fov[0:middle])/float(middle)
+	leftMin = min(fov[0:middle])
+	rightAvg = sum(fov[middle:(samples-1)])/float(middle)
+	rightMin = min(fov[middle:(samples-1)])
+	print(f'leftAvg:{leftAvg} leftMin:{leftMin} rightAvg:{rightAvg} rightMin{rightMin}')
+	
+	if leftAvg<25.0 and rightAvg<25.0 and dist<20.0:
+		return 'reverse-turn'
+	
+	
+	elif leftMin < 15.0 and rightAvg > 25.0:
+		return 'right'
+		
+	if rightMin < 15.0 and leftAvg > 25.0:
+		return 'left'
+	
+	if dist < 10.0:
+		return 'stop'
+		
+	else:
+		return 'continue'
 	
 def loop():
 		global direction, angle, destination
@@ -332,8 +618,8 @@ while True:
 		loop()
 		
 	frameCounter +=1
-	#print(body.Hexapod.step_set)
 	
+
 	# Check movement cycle
 	
 	if body.Hexapod.step_set !=1:
@@ -345,8 +631,10 @@ while True:
 			moveCycles += 1
 			print(f'Movement cycles: {moveCycles}, Distance covered: {moveCycles * 4} cm')	
 	
+	# Check inputs on minimap
+	check_map_input()
 	
-	# Keyboard input
+	# Check keyboard input
 	# Stores only last 8 bits (ASCII) of 32-bit key input
 	keyPressed = cv2.waitKey(1) & 0xFF  
 																		
@@ -427,9 +715,9 @@ while True:
 				print('Testing movement')
 				print(f'Rotate {angle} degrees {direction} then move {destination} cm forward')
 				angle=((((angle-1)//15)+2)*15)  
-				rotate(direction,angle)
+				rotate(direction,angle,mini=False)
 				time.sleep(0.1)
-				move_distance(1,destination+16)
+				move_distance(1,destination+16,mini=False)
 				minimap.update_map(
 					minimap.find_delta(direction,angle,destination),
 					obj=True,
@@ -438,9 +726,9 @@ while True:
 				minimap.draw_map()
 				
 				time.sleep(0.1)
-				rotate((direction-1)*-1,angle)
+				rotate((direction-1)*-1,angle,mini=False)
 				time.sleep(0.1)
-				move_distance(1,32)
+				move_distance(1,32,mini=False)
 				minimap.update_map(
 					minimap.find_delta((direction-1)*-1,angle,32),
 					obj=False,
@@ -448,12 +736,37 @@ while True:
 				minimap.draw_map()
 				
 			else:
-				rotate(0,90)
+				rotate(1,29)
 				time.sleep(0.1)
 				move_distance(1,8)
-				minimap.update_map(minimap.find_delta(0,88,8))
-				minimap.draw_map()
+				#minimap.update_map(minimap.find_delta(0,88,8))
+				#minimap.draw_map()
 				print('Testing movement')
+				
+		elif keyPressed == ord('y'):
+				# Plot obstacle straight ahead
+				minimap.update_map(
+					minimap.find_delta(0,0,0),
+					obj=True,
+					objDist=dist
+					)
+				minimap.draw_map()
+				
+		elif keyPressed == ord('w'):
+				if wayFollowing:
+					wayFollowing = 0
+					print('Ignoring waypoints...')
+				else:
+					wayFollowing = 1
+					print('FOLLOWING WAYPOINTS...')
+					
+		elif keyPressed == ord('g'):
+				if goalFollowing:
+					goalFollowing = 0
+					print('Ignoring goal...')
+				else:
+					goalFollowing = 1
+					print('HEADING TO GOAL...')
 				
 		# Manual head movement
 				
@@ -476,19 +789,24 @@ while True:
 		# Manual body movement
 		
 		elif keyPressed == ord('i'):
-				body.commandInput('forward',body.Hexapod)
+				#body.commandInput('forward',body.Hexapod)
+				
+				move_distance(1,4)
 				print('Moving Forward')
 		
 		elif keyPressed == ord('k'):
-				body.commandInput('backward',body.Hexapod)
+				#body.commandInput('backward',body.Hexapod)
+				move_distance(0,4)
 				print('Moving Backward')
 				
 		elif keyPressed == ord('j'):
-				body.commandInput('left',body.Hexapod)
+				#body.commandInput('left',body.Hexapod)
+				rotate(0,15)
 				print('Moving Left')
 				
 		elif keyPressed == ord('l'):
-				body.commandInput('right',body.Hexapod)
+				#body.commandInput('right',body.Hexapod)
+				rotate(1,15)
 				print('Moving Right')
 				
 		elif keyPressed == ord('o'):

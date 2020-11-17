@@ -67,7 +67,7 @@ pixelToCm = {   "9":  65.00,
 }
 
 class Map:
-	scaleFactor = 2.0 # every centimetre correlates to 5 pixels on map
+	#scaleFactor = 2.0 # every centimetre correlates to 5 pixels on map
 	
 	def __init__(self,resW,resH,scaleFactor=5.0,initHeading=0):
 		self.resW = resW
@@ -80,16 +80,23 @@ class Map:
 		self.scaleFactor = scaleFactor
 		# add 90 degrees to make North correlate to 0 degrees
 		# in polar coordinates
-		self.heading=initHeading-90
+		self.heading=initHeading
 		self.arrowHead=math.radians(self.heading)
 		self.arrow=[
 			[self.resW//2,self.resH//2],
-			[int(20*math.cos(self.arrowHead)+self.resW//2),
-			int(20*math.sin(self.arrowHead)+self.resH//2)]]
-		self.objCoords=[]
+			[int(20*math.cos(self.arrowHead-((math.pi)/2))+self.resW//2),
+			int(20*math.sin(self.arrowHead-((math.pi)/2))+self.resH//2)]]
+		self.objCoords=[] # obstacles detected positions
+		self.wayp=[] # waypoints
+		self.wayDist = 0.0 # Distance(cm) to waypoint
+		self.wayHeading = 0.0 # heading (0-359 deg)
+		self.goal=[] # ultimate destination
+		self.goalHeading = 0.0 # heading (0-359 deg)
+		self.goalDist = 0.0 # Distance(cm) to ultimate destination
 		
 		print(f'Minimap initialized, initial heading:{initHeading}')
 		
+
 	def draw_map(self,colorC=(0,0,255),colorL=(255,0,0),colorO=(255,255,255)):
 		self.map = np.zeros((self.resH,self.resW,3), dtype=np.uint8)
 		i=0 # Path line counter
@@ -109,12 +116,67 @@ class Map:
 			tuple(self.arrow[1]),
 			(0,255,255),
 			2)
+		print(f'Current heading: {math.degrees(self.arrowHead)}')
+		
+		# Draws waypoints
+		if len(self.wayp) != 0:
+			waypoint = 1
+			for w in self.wayp:
+				w[0]+=deltaX
+				w[1]+=deltaY
+				if w != [self.resW//2,self.resH//2]:
+					cv2.circle(self.map,
+						tuple(w),
+						5,
+						(0,255,0),
+						-1
+						)
+					cv2.putText(self.map,
+						str(waypoint),
+						(w[0]+1,w[1]-1),
+						font,
+						0.5,
+						(50,50,255),
+						2
+						)
+					waypoint+=1
+					
+			# Update distance, bearing to next waypoint
+			self.wayDist,self.wayHeading = calc_bearing(
+					[self.resW//2,self.resH//2],
+					self.wayp[0])
+			print(f'Bearing to next waypoint:{self.wayHeading}')
+			self.wayDist = self.wayDist/self.scaleFactor
+			print(f'Distance to next waypoint:{self.wayDist}')
+			
+			# Removes waypoint if reached
+			xTol = abs(self.wayp[0][0]-self.resW//2)
+			yTol = abs(self.wayp[0][1]-self.resH//2)
+			if xTol <= 3.5*self.scaleFactor and yTol <= 3.5*self.scaleFactor:
+				self.wayp.pop(0)
+				print('WAYPOINT REACHED')
+				
+		# Draws ultimate destination
+		if len(self.goal) != 0:
+			self.goal[0]+=deltaX
+			self.goal[1]+=deltaY
+			cv2.circle(self.map,tuple(self.goal),8,(0,255,0),2)
+			
+			# Update distance, bearing to destination
+			self.goalDist,self.goalHeading = calc_bearing(
+					[self.resW//2,self.resH//2],
+					self.goal)
+			print(f'Bearing to destination:{self.goalHeading}')
+			self.goalDist = self.goalDist/self.scaleFactor
+			print(f'Distance to destination:{self.goalDist}')
+		
 		# Draws objects detected along the way
 		if len(self.objCoords) != 0:
 			for o in self.objCoords:
 				o[0]+=deltaX
 				o[1]+=deltaY
 				cv2.circle(self.map, tuple(o), 5, colorO, -1)
+				
 		# Draws path as red points connected by white lines
 		for c in self.coords:
 			#print(tuple(c))
@@ -145,24 +207,25 @@ class Map:
 		self.newCenter = coords
 		self.coords.insert(0,self.newCenter)
 		if obj:
-			self.objCoords.append([int(objDist*self.scaleFactor*math.cos(self.arrowHead)+self.resW//2),
-			int(objDist*self.scaleFactor*math.sin(self.arrowHead)+self.resH//2)]
+			self.objCoords.append([int(objDist*self.scaleFactor*math.cos(self.arrowHead-(math.pi)/2)+self.resW//2),
+			int(objDist*self.scaleFactor*math.sin(self.arrowHead-(math.pi)/2)+self.resH//2)]
 			)
 		
 	def find_delta(self,direction,rotation,distance):
 		coords = []
 		distance=float(distance)*self.scaleFactor
-		rotation=(((rotation-1)//15)+2)*15
+		#rotation=(((rotation-1)//15)+1)*15
 		
 		if direction:
-			angle=rotation
-		else: angle=rotation*-1
+			angle=rotation*1
+		else: 
+			angle=rotation*-1
 		
-		bearing=float(self.heading+angle)
+		bearing=float(self.heading-90+angle)
 		self.heading+=angle # New heading for body
 		self.arrowHead+=math.radians(angle)
-		self.arrow[1]=[int(20*math.cos(self.arrowHead)+self.resW//2),
-			int(20*math.sin(self.arrowHead)+self.resH//2)]
+		self.arrow[1]=[int(20*math.cos(self.arrowHead-((math.pi)/2))+self.resW//2),
+			int(20*math.sin(self.arrowHead-((math.pi)/2))+self.resH//2)]
 		
 		deltaX=int(distance*math.cos(math.radians(bearing)))
 		print(f'deltaX:{deltaX}')
@@ -172,6 +235,7 @@ class Map:
 		coords=[int((self.resW//2)+deltaX),int((self.resH//2)+deltaY)]
 		
 		return coords
+		
 
 # Face tracking using head servos
 def face_track(frame,body,laser,resW,resH):
@@ -419,6 +483,20 @@ def find_way(frame,bounds,distance,obsWidth,midpoint,resW,resH,show=False):
 			)
 		
 	return direction, angle, destination
+	
+def calc_bearing(center, destination):
+	deltaX = float(destination[0] - center[0])
+	deltaY = float(center[1] - destination[1])
+	wayDist = math.sqrt((deltaY ** 2)+(deltaX ** 2))
+	
+	pheta = math.atan2(deltaY,deltaX)
+	bearing = (math.degrees(pheta) - 90.0)*-1
+	
+	if bearing < 0:
+		return wayDist,bearing + 360 # 'corrects' negative angles
+	else:
+		return wayDist,bearing
+	
 
 def shapeclassify(frame, minShapeArea = 2500, showEdge = False):
         gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
