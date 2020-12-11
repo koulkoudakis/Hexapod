@@ -18,6 +18,9 @@ Y_lock = 0	# Target is centered in Y direction
 X_lock = 0	# Target is centered in X direction
 tor = 15	# Error tolerance for centering camera
 
+dps = 2 # Distance per step (cm)
+aps = 6 # angle per step (deg)
+
 # Table for estimating object width (distance: pixels per cm)
 
 pixelToCm = {   "9":  65.00,
@@ -67,9 +70,9 @@ pixelToCm = {   "9":  65.00,
 }
 
 class Map:
-	#scaleFactor = 2.0 # every centimetre correlates to 5 pixels on map
+	#scaleFactor =  # every centimetre correlates to 5 pixels on map
 	
-	def __init__(self,resW,resH,scaleFactor=5.0,initHeading=0):
+	def __init__(self,resW,resH,scaleFactor=2.0,initHeading=0):
 		self.resW = resW
 		self.resH = resH
 		self.map = np.zeros((resH,resW,3), dtype=np.uint8)

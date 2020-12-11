@@ -56,7 +56,7 @@ class Body:
         self.look_wiggle = 30  # Head movement increment using 'look' command
         self.move_stu = 1  # Enables smooth servo movement if smoothMode = 1
 
-        self.DPI = 17  # DPI for smooth servo movement (set higher for smoother movement)
+        self.DPI = 7  # DPI for smooth servo movement (set higher for smoother movement)
 
         # Movement status
         self.step_set = 1
@@ -1069,15 +1069,16 @@ if __name__ == '__main__':
     Hexapod.move_stu = 1
     try:
 
-        
+        '''
         while 1:
+            
             Hexapod.move(Hexapod.step_set, 35, 'no')
             Hexapod.step_set += 1
             if Hexapod.step_set > 4:
                 Hexapod.step_set = 1
             time.sleep(0.12)
-        
-
+            
+        '''    
         '''
         while 1:
             Hexapod.dove(1,-35,0.01,17,'no')
@@ -1088,20 +1089,20 @@ if __name__ == '__main__':
 
         # Hexapod.mpu6050Test()
         # print(Hexapod.sensor.get_temp())
-        '''
+    
 
         for i in range(0, 4):
             Hexapod.look_left()
-            time.sleep(1)
+            time.sleep(0.5)
         for i in range(0, 8):
             Hexapod.look_right()
-            time.sleep(1)
+            time.sleep(0.5)
         time.sleep(1)
         Hexapod.look_home()
 
 
         '''
-        ''''''
+        '''
         # Hexapod.pwm.set_all_pwm(0,0)
         # Hexapod.pwm.set_all_pwm(0, 300)
         # time.sleep(10)
@@ -1110,3 +1111,4 @@ if __name__ == '__main__':
         Hexapod.pwm.set_all_pwm(0, 300)
         time.sleep(1)
         Hexapod.clean_all()
+        
